@@ -40,14 +40,13 @@ def build(upstream: Path, output: Path, wrapper: Path) -> None:
     game = replace_once(game, old_block, new_block, "game.js base URL block")
 
     old_fetch = "    const response = await fetch(data_content);"
-    new_fetch = '''    let response;\n    try {\n        response = await fetch(data_content);\n    } catch (error) {\n        console.error("Failed to fetch game data:", data_content, error);\n        const status = document.getElementById("status");\n        if (status) {\n            status.textContent = "Falha ao carregar os dados do jogo. O CDN bloqueou o acesso por CORS; configure um proxy autorizado em pages-config.js.";\n        }\n        throw error;\n    }\n    if (!response.ok) {\n        throw new Error(`Game data request failed: ${response.status} ${response.statusText}`);\n    }'''
+    new_fetch = '''    let response;\n    try {\n        response = await fetch(data_content);\n    } catch (error) {\n        console.error("Failed to fetch game data:", data_content, error);\n        const status = document.getElementById("status");\n        if (status) {\n            status.textContent = "Falha ao carregar os dados do jogo. O servidor configurado não permite esta origem; use uma hospedagem/proxy autorizado em pages-config.js.";\n        }\n        throw error;\n    }\n    if (!response.ok) {\n        throw new Error(`Game data request failed: ${response.status} ${response.statusText}`);\n    }'''
     if old_fetch in game:
         game = game.replace(old_fetch, new_fetch, 1)
     game_path.write_text(game, encoding="utf-8", newline="\n")
 
     index = index_path.read_text(encoding="utf-8")
 
-    # Project Pages runs below /reVC/, so root-relative assets point at the account root.
     replacements = {
         'src="/intro.mp4"': 'src="intro.mp4"',
         'src="/cover.jpg"': 'src="cover.jpg"',
@@ -55,6 +54,8 @@ def build(upstream: Path, output: Path, wrapper: Path) -> None:
         "url('/cover.jpg')": "url('cover.jpg')",
         'url("/cover.jpg")': 'url("cover.jpg")',
         'url(/cover.jpg)': 'url(cover.jpg)',
+        'href="/favicon.ico"': 'href="favicon.svg"',
+        "href='/favicon.ico'": "href='favicon.svg'",
     }
     for old, new in replacements.items():
         index = index.replace(old, new)
@@ -63,8 +64,8 @@ def build(upstream: Path, output: Path, wrapper: Path) -> None:
     injection = (
         '<head>\n'
         '    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 64 64\'%3E%3Crect width=\'64\' height=\'64\' rx=\'12\' fill=\'%23100731\'/%3E%3Ctext x=\'32\' y=\'42\' text-anchor=\'middle\' font-size=\'34\' fill=\'white\'%3EVC%3C/text%3E%3C/svg%3E">\n'
-        '    <script src="coi-serviceworker.js?v=13"></script>\n'
-        '    <script src="pages-config.js?v=13"></script>'
+        '    <script src="coi-serviceworker.js?v=14"></script>\n'
+        '    <script src="pages-config.js?v=14"></script>'
     )
     index = replace_once(index, head_marker, injection, "index.html <head>")
 
@@ -95,9 +96,10 @@ def build(upstream: Path, output: Path, wrapper: Path) -> None:
         "vcbr is configurable": "pagesVcbrBase" in built_game,
         "root intro path removed": 'src="/intro.mp4"' not in built_index,
         "root cover path removed": not any(ref in built_index for ref in broken_cover_refs),
+        "root favicon path removed": '/favicon.ico' not in built_index,
         "favicon embedded": 'data:image/svg+xml' in built_index,
-        "COI worker included": 'src="coi-serviceworker.js?v=13"' in built_index,
-        "Pages config included": 'src="pages-config.js?v=13"' in built_index,
+        "COI worker included": 'src="coi-serviceworker.js?v=14"' in built_index,
+        "Pages config included": 'src="pages-config.js?v=14"' in built_index,
         "nojekyll exists": (output / ".nojekyll").exists(),
     }
     failed = [name for name, ok in checks.items() if not ok]
