@@ -38,16 +38,30 @@ def build(upstream: Path, output: Path, wrapper: Path) -> None:
     )
     new_block = f'''// Base URLs - GitHub Pages adapter\nconst pagesConfig = window.REVCDOS_PAGES_CONFIG || {{}};\nconst pagesVcskyBase = pagesConfig.vcskyBaseUrl || "{UPSTREAM_VCSKY}";\nconst pagesVcbrBase = pagesConfig.vcbrBaseUrl || "{UPSTREAM_VCBR}";\nconst replaceFetch = (str) => str.replace("{UPSTREAM_VCSKY}", pagesVcskyBase)\nconst replaceBR = pagesVcbrBase'''
     game = replace_once(game, old_block, new_block, "game.js base URL block")
+
+    old_fetch = "    const response = await fetch(data_content);"
+    new_fetch = '''    let response;\n    try {\n        response = await fetch(data_content);\n    } catch (error) {\n        console.error("Failed to fetch game data:", data_content, error);\n        const status = document.getElementById("status");\n        if (status) {\n            status.textContent = "Falha ao carregar os dados do jogo. O CDN bloqueou o acesso por CORS; configure o proxy em pages-config.js.";\n        }\n        throw error;\n    }\n    if (!response.ok) {\n        throw new Error(`Game data request failed: ${response.status} ${response.statusText}`);\n    }'''
+    if old_fetch in game:
+        game = game.replace(old_fetch, new_fetch, 1)
     game_path.write_text(game, encoding="utf-8", newline="\n")
 
     index = index_path.read_text(encoding="utf-8")
 
-    if 'src="/intro.mp4"' in index:
-        index = index.replace('src="/intro.mp4"', 'src="intro.mp4"', 1)
+    # Project Pages runs below /reVC/, so root-relative assets point at the account root.
+    replacements = {
+        'src="/intro.mp4"': 'src="intro.mp4"',
+        'src="/cover.jpg"': 'src="cover.jpg"',
+        'href="/cover.jpg"': 'href="cover.jpg"',
+        "url('/cover.jpg')": "url('cover.jpg')",
+        'url("/cover.jpg")': 'url("cover.jpg")',
+    }
+    for old, new in replacements.items():
+        index = index.replace(old, new)
 
     head_marker = "<head>"
     injection = (
         '<head>\n'
+        '    <link rel="icon" type="image/svg+xml" href="favicon.svg">\n'
         '    <script src="coi-serviceworker.js"></script>\n'
         '    <script src="pages-config.js"></script>'
     )
@@ -61,6 +75,7 @@ def build(upstream: Path, output: Path, wrapper: Path) -> None:
 
     shutil.copy2(wrapper / "pages-config.js", output / "pages-config.js")
     shutil.copy2(wrapper / "coi-serviceworker.js", output / "coi-serviceworker.js")
+    shutil.copy2(wrapper / "favicon.svg", output / "favicon.svg")
     (output / ".nojekyll").write_text("", encoding="utf-8")
 
     built_game = game_path.read_text(encoding="utf-8")
@@ -69,6 +84,8 @@ def build(upstream: Path, output: Path, wrapper: Path) -> None:
         "config injected": "REVCDOS_PAGES_CONFIG" in built_game,
         "vcbr is configurable": "pagesVcbrBase" in built_game,
         "root intro path removed": 'src="/intro.mp4"' not in built_index,
+        "root cover path removed": '/cover.jpg' not in built_index,
+        "favicon included": 'href="favicon.svg"' in built_index and (output / "favicon.svg").exists(),
         "COI worker included": 'src="coi-serviceworker.js"' in built_index,
         "Pages config included": 'src="pages-config.js"' in built_index,
         "nojekyll exists": (output / ".nojekyll").exists(),
