@@ -17,6 +17,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout this Pages wrapper
         uses: actions/checkout@v6
@@ -26,6 +27,24 @@ jobs:
 
       - name: Build static GitHub Pages site
         run: python3 build_pages.py upstream public
+
+      - name: Validate generated Pages artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s public/index.html
+          test -s public/game.js
+          test -s public/cover.jpg
+          test -s public/intro.mp4
+          test -s public/favicon.svg
+          test -s public/pages-config.js
+          test -s public/coi-serviceworker.js
+          test -s public/build-info.json
+          test -f public/.nojekyll
+          ! grep -Eqi '(src|href)=["'"']/+(cover\.jpg|intro\.mp4|favicon\.ico)["'"']' public/index.html
+          ! grep -Eqi 'url\([[:space:]]*["'"']?/+(cover\.jpg|favicon\.ico)' public/index.html
+          grep -q 'revcdos-pages-build' public/index.html
+          grep -q 'REVCDOS_PAGES_CONFIG' public/game.js
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -42,6 +61,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: build
     steps:
       - name: Deploy to GitHub Pages
