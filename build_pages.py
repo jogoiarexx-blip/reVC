@@ -10,7 +10,7 @@ from pathlib import Path
 
 UPSTREAM_VCSKY = "https://cdn.dos.zone/vcsky/"
 UPSTREAM_VCBR = "https://br.cdn.dos.zone/vcsky/"
-BUILD_VERSION = "16"
+BUILD_VERSION = "17"
 
 
 def replace_once(text: str, old: str, new: str, label: str) -> str:
@@ -54,7 +54,7 @@ def build(upstream: Path, output: Path, wrapper: Path) -> None:
     game = replace_once(game, old_block, new_block, "game.js base URL block")
 
     old_fetch = "    const response = await fetch(data_content);"
-    new_fetch = '''    let response;\n    try {\n        response = await fetch(data_content, { cache: "default" });\n    } catch (error) {\n        console.error("Failed to fetch game data:", data_content, error);\n        const status = document.getElementById("status");\n        if (status) {\n            status.textContent = "Falha ao carregar os dados do jogo. A origem configurada bloqueou a requisição. Configure uma hospedagem/proxy autorizado em pages-config.js.";\n        }\n        throw error;\n    }\n    if (!response.ok) {\n        const error = new Error(`Game data request failed: ${response.status} ${response.statusText}`);\n        console.error(error, data_content);\n        throw error;\n    }'''
+    new_fetch = '''    let response;\n    try {\n        response = await fetch(data_content, { cache: "default" });\n    } catch (error) {\n        console.error("Failed to fetch game data:", data_content, error);\n        const status = document.getElementById("status");\n        if (status) {\n            status.textContent = "Não foi possível obter os dados do jogo desta origem. Use seus arquivos originais ou uma hospedagem autorizada.";\n        }\n        throw error;\n    }\n    if (!response.ok) {\n        const error = new Error(`Game data request failed: ${response.status} ${response.statusText}`);\n        console.error(error, data_content);\n        throw error;\n    }'''
     if old_fetch in game:
         game = game.replace(old_fetch, new_fetch, 1)
     game_path.write_text(game, encoding="utf-8", newline="\n")
@@ -82,6 +82,17 @@ def build(upstream: Path, output: Path, wrapper: Path) -> None:
         '<head>\n'
         '    <meta name="revcdos-pages-build" content="' + BUILD_VERSION + '">\n'
         '    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 64 64\'%3E%3Crect width=\'64\' height=\'64\' rx=\'12\' fill=\'%23100731\'/%3E%3Ctext x=\'32\' y=\'42\' text-anchor=\'middle\' font-size=\'34\' fill=\'white\'%3EVC%3C/text%3E%3C/svg%3E">\n'
+        '    <script>\n'
+        '    (() => {\n'
+        '      const params = new URLSearchParams(window.location.search);\n'
+        '      const hasAuthorizedProxy = params.has("proxy") || localStorage.getItem("revcdos.proxy");\n'
+        '      if (!hasAuthorizedProxy && params.get("request_original_game") !== "1") {\n'
+        '        params.set("request_original_game", "1");\n'
+        '        const next = window.location.pathname + "?" + params.toString() + window.location.hash;\n'
+        '        window.location.replace(next);\n'
+        '      }\n'
+        '    })();\n'
+        '    </script>\n'
         f'    <script src="coi-serviceworker.js?v={BUILD_VERSION}"></script>\n'
         f'    <script src="pages-config.js?v={BUILD_VERSION}"></script>'
     )
@@ -102,6 +113,7 @@ def build(upstream: Path, output: Path, wrapper: Path) -> None:
         "pagesBuild": BUILD_VERSION,
         "upstreamRepository": "Lolendor/reVCDOS",
         "upstreamCommit": git_sha(upstream),
+        "defaultDataMode": "request-original-game",
     }
     (output / "build-info.json").write_text(
         json.dumps(build_info, indent=2) + "\n",
@@ -119,6 +131,7 @@ def build(upstream: Path, output: Path, wrapper: Path) -> None:
     checks = {
         "config injected": "REVCDOS_PAGES_CONFIG" in built_game,
         "vcbr is configurable": "pagesVcbrBase" in built_game,
+        "original game mode injected": 'request_original_game' in built_index,
         "no broken root asset refs": not broken_root_asset_pattern.search(built_index),
         "cover exists": (output / "cover.jpg").is_file(),
         "intro exists": (output / "intro.mp4").is_file(),
