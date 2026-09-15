@@ -80,11 +80,21 @@ def build(upstream: Path, output: Path, wrapper: Path) -> None:
 
     built_game = game_path.read_text(encoding="utf-8")
     built_index = index_path.read_text(encoding="utf-8")
+
+    # Validate only the broken root-relative asset forms. A substring such as
+    # https://example.com/cover.jpg must not make the build fail.
+    broken_cover_refs = (
+        'src="/cover.jpg"',
+        'href="/cover.jpg"',
+        "url('/cover.jpg')",
+        'url("/cover.jpg")',
+    )
+
     checks = {
         "config injected": "REVCDOS_PAGES_CONFIG" in built_game,
         "vcbr is configurable": "pagesVcbrBase" in built_game,
         "root intro path removed": 'src="/intro.mp4"' not in built_index,
-        "root cover path removed": '/cover.jpg' not in built_index,
+        "root cover path removed": not any(ref in built_index for ref in broken_cover_refs),
         "favicon included": 'href="favicon.svg"' in built_index and (output / "favicon.svg").exists(),
         "COI worker included": 'src="coi-serviceworker.js"' in built_index,
         "Pages config included": 'src="pages-config.js"' in built_index,
